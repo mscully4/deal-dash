@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 
@@ -13,7 +14,7 @@ class Deal:
     retailer: str
 
     @classmethod
-    def from_hit(cls, hit: dict, retailer: str) -> "Deal":
+    def from_hit(cls, hit: dict[str, Any], retailer: str) -> "Deal":
         params = parse_qs(urlparse(hit["link"]).query)
         if "url" not in params:
             raise ValueError(f"No url param in link: {hit['link']!r}")

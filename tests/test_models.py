@@ -1,3 +1,5 @@
+import pytest
+
 from deal_dash.models import Deal
 
 
@@ -29,6 +31,5 @@ def test_deal_from_hit_missing_link_raises():
         "category": "Tools",
         "stock": 1,
     }
-    import pytest
     with pytest.raises(ValueError, match="url"):
         Deal.from_hit(hit, retailer="homedepot")
