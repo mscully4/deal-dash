@@ -31,7 +31,6 @@ def api_page_1():
     }
 
 
-@pytest.mark.asyncio
 async def test_search_returns_deals(httpx_mock: HTTPXMock, client, api_page_1):
     httpx_mock.add_response(
         method="POST",
@@ -48,7 +47,6 @@ async def test_search_returns_deals(httpx_mock: HTTPXMock, client, api_page_1):
     assert deals[0].retailer == "homedepot"
 
 
-@pytest.mark.asyncio
 async def test_search_sends_correct_payload(httpx_mock: HTTPXMock, client, api_page_1):
     httpx_mock.add_response(
         method="POST",
@@ -64,12 +62,13 @@ async def test_search_sends_correct_payload(httpx_mock: HTTPXMock, client, api_p
     assert body["sortBy"] == "discount:desc"
     assert "location_geo:(30.5083, -97.6789, 25 mi)" in body["filterBy"]
     assert body["perPage"] == 100
+    assert body["page"] == 1
+    assert body["query"] == "*"
 
 
-@pytest.mark.asyncio
 async def test_search_paginates(httpx_mock: HTTPXMock, client):
     page_hit = {
-        "title": f"Item",
+        "title": "Item",
         "price": 1.0,
         "discount": 50,
         "link": "https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F1",
@@ -88,7 +87,6 @@ async def test_search_paginates(httpx_mock: HTTPXMock, client):
     assert len(httpx_mock.get_requests()) == 2
 
 
-@pytest.mark.asyncio
 async def test_search_sets_session_cookie(httpx_mock: HTTPXMock, client, api_page_1):
     httpx_mock.add_response(
         method="POST",

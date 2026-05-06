@@ -20,7 +20,7 @@ class RebelsavingsClient:
         lon: float,
         radius_mi: float,
     ) -> AsyncIterator[Deal]:
-        filter_by = f"stock:>0 && location_geo:({lat}, {lon}, {radius_mi} mi)"
+        filter_by = f"stock:>0 && location_geo:({lat}, {lon}, {radius_mi:g} mi)"
         headers = {
             "Content-Type": "application/json",
             "Cookie": f"rs_session={self._cookie}",
