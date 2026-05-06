@@ -14,21 +14,20 @@ def client():
     return RebelsavingsClient(session_cookie=SESSION_COOKIE)
 
 
+def _make_hit(
+    title: str = "Padlock Steel 2in",
+    price: float = 1.17,
+    discount: int = 91,
+    link: str = "https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F123",
+    category: str = "Hardware",
+    stock: int = 3,
+) -> dict[str, object]:
+    return {"document": {"title": title, "price": price, "discount": discount, "link": link, "category": category, "stock": stock}}
+
+
 @pytest.fixture
 def api_page_1():
-    return {
-        "found": 1,
-        "hits": [
-            {
-                "title": "Padlock Steel 2in",
-                "price": 1.17,
-                "discount": 91,
-                "link": "https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F123",
-                "category": "Hardware",
-                "stock": 3,
-            }
-        ],
-    }
+    return {"found": 1, "hits": [_make_hit()]}
 
 
 async def test_search_returns_deals(httpx_mock: HTTPXMock, client, api_page_1):
@@ -67,14 +66,14 @@ async def test_search_sends_correct_payload(httpx_mock: HTTPXMock, client, api_p
 
 
 async def test_search_paginates(httpx_mock: HTTPXMock, client):
-    page_hit = {
-        "title": "Item",
-        "price": 1.0,
-        "discount": 50,
-        "link": "https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F1",
-        "category": "Tools",
-        "stock": 1,
-    }
+    page_hit = _make_hit(
+        title="Item",
+        price=1.0,
+        discount=50,
+        link="https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F1",
+        category="Tools",
+        stock=1,
+    )
     # 101 total found, perPage=100 → 2 pages
     httpx_mock.add_response(json={"found": 101, "hits": [page_hit] * 100})
     httpx_mock.add_response(json={"found": 101, "hits": [page_hit]})

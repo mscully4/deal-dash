@@ -44,5 +44,5 @@ class RebelsavingsClient:
                     found = data.get("found", 0)
                     total_pages = max(1, math.ceil(found / _PER_PAGE))
                 for hit in data.get("hits", []):
-                    yield Deal.from_hit(hit, retailer=retailer)
+                    yield Deal.from_hit(hit["document"], retailer=retailer)
                 page += 1
