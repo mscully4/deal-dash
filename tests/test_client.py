@@ -1,7 +1,10 @@
 import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
 from pytest_httpx import HTTPXMock
-from deal_dash.client import RebelsavingsClient
+
+from deal_dash.clients.rebel_savings import RebelsavingsClient
 from deal_dash.models import Deal
 
 
@@ -11,7 +14,9 @@ LAT, LON, RADIUS = 30.5083, -97.6789, 25
 
 @pytest.fixture
 def client():
-    return RebelsavingsClient(session_cookie=SESSION_COOKIE)
+    c = RebelsavingsClient()
+    c._cookie = SESSION_COOKIE  # pre-seed to skip Playwright in unit tests
+    return c
 
 
 def _make_hit(
@@ -97,3 +102,19 @@ async def test_search_sets_session_cookie(httpx_mock: HTTPXMock, client, api_pag
 
     request = httpx_mock.get_request()
     assert "rs_session=fake-session-token" in request.headers["cookie"]
+
+
+async def test_search_fetches_cookie_lazily(httpx_mock: HTTPXMock, api_page_1):
+    httpx_mock.add_response(
+        method="POST",
+        url="https://www.rebelsavings.com/api/search",
+        json=api_page_1,
+    )
+    with patch(
+        "deal_dash.clients.rebel_savings.get_session_cookie",
+        new=AsyncMock(return_value="lazy-token"),
+    ):
+        c = RebelsavingsClient()
+        async for _ in c.search("homedepot", LAT, LON, RADIUS):
+            pass
+        assert c._cookie == "lazy-token"

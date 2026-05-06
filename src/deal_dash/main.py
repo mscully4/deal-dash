@@ -3,8 +3,7 @@ import asyncio
 import click
 import zipcodes
 
-from deal_dash.client import RebelsavingsClient
-from deal_dash.session import get_session_cookie
+from deal_dash.clients.rebel_savings import RebelsavingsClient
 
 
 RETAILER_CHOICES = ["homedepot", "lowes", "walmart", "walgreens", "tractorsupply"]
@@ -21,8 +20,7 @@ def _zip_to_latlon(zip_code: str) -> tuple[float, float]:
 async def _run(retailer: str, zip_code: str, radius: float, min_discount: int) -> None:
     click.echo(f"Fetching {retailer} clearance deals near {zip_code}...")
     lat, lon = _zip_to_latlon(zip_code)
-    cookie = await get_session_cookie(retailer)
-    client = RebelsavingsClient(session_cookie=cookie)
+    client = RebelsavingsClient()
 
     deals = []
     async for deal in client.search(retailer, lat, lon, radius):
