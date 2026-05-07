@@ -1,8 +1,9 @@
-import { CfnResource, Duration, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { Duration, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, StreamViewType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Code, Function, Runtime, StartingPosition } from "aws-cdk-lib/aws-lambda";
 import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
+import { CfnIndex, CfnVectorBucket } from "aws-cdk-lib/aws-s3vectors";
 import { Construct } from "constructs";
 
 export class RebelSavingsStack extends Stack {
@@ -20,20 +21,16 @@ export class RebelSavingsStack extends Stack {
       stream: StreamViewType.NEW_IMAGE,
     });
 
-    const vectorBucket = new CfnResource(this, "VectorBucket", {
-      type: "AWS::S3Vectors::VectorBucket",
-      properties: { VectorBucketName: "deal-dash-vectors" },
+    const vectorBucket = new CfnVectorBucket(this, "VectorBucket", {
+      vectorBucketName: "deal-dash-vectors",
     });
 
-    const vectorIndex = new CfnResource(this, "VectorIndex", {
-      type: "AWS::S3Vectors::VectorIndex",
-      properties: {
-        VectorBucketName: "deal-dash-vectors",
-        VectorIndexName: "deals",
-        DataType: "float32",
-        Dimension: 256,
-        DistanceMetric: "cosine",
-      },
+    const vectorIndex = new CfnIndex(this, "VectorIndex", {
+      vectorBucketName: "deal-dash-vectors",
+      indexName: "deals",
+      dataType: "float32",
+      dimension: 256,
+      distanceMetric: "cosine",
     });
     vectorIndex.addDependency(vectorBucket);
 

@@ -1,0 +1,25 @@
+{
+  "name": "deal-dash-cdk",
+  "version": "0.1.0",
+  "main": "dist/lib/app.js",
+  "types": "dist/types/app.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "clean": "rm -rf dist && rm -rf cdk.out",
+    "format:check": "if-env SKIP_FORMAT=true || (prettier --check \"lib/**/*.{ts,tsx}\" && eslint \"lib/**/*.{ts,tsx}\")",
+    "format:fix": "if-env SKIP_FORMAT=true || (prettier --write \"lib/**/*.{ts,tsx}\" && eslint --fix \"lib/**/*.{ts,tsx}\")"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.24",
+    "aws-cdk": "2.1121.0",
+    "ts-node": "^10.9.2",
+    "typescript": "~5.3.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "2.253.0",
+    "constructs": "^10.0.0",
+    "source-map-support": "^0.5.21"
+  }
+}
