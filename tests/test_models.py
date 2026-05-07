@@ -1,18 +1,28 @@
 import pytest
 
-from deal_dash.models import Deal
+from deal_dash.rebel_savings.models import Deal
 
 
-def test_deal_from_api_hit():
-    hit = {
+def _make_hit(**kwargs) -> dict:
+    defaults = {
         "title": "Padlock Steel 2in",
         "price": 1.17,
         "discount": 91,
         "link": "https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F123",
         "category": "Hardware",
+        "subcategory": "Padlocks",
         "stock": 3,
+        "upc": "012345678901",
+        "store": 123,
+        "address": "1234 Main St",
+        "city": "Austin",
+        "state": "TX",
     }
-    deal = Deal.from_hit(hit, retailer="homedepot")
+    return defaults | kwargs
+
+
+def test_deal_from_api_hit():
+    deal = Deal.from_hit(_make_hit(), retailer="homedepot")
     assert deal.title == "Padlock Steel 2in"
     assert deal.price == 1.17
     assert deal.discount == 91
@@ -20,16 +30,12 @@ def test_deal_from_api_hit():
     assert deal.category == "Hardware"
     assert deal.stock == 3
     assert deal.retailer == "homedepot"
+    assert deal.upc == "012345678901"
+    assert deal.store == 123
+    assert deal.item_id == "012345678901#123"
 
 
 def test_deal_from_hit_missing_link_raises():
-    hit = {
-        "title": "X",
-        "price": 1.0,
-        "discount": 50,
-        "link": "https://www.rebelsavings.com/redirect",  # no ?url= param
-        "category": "Tools",
-        "stock": 1,
-    }
+    hit = _make_hit(link="https://www.rebelsavings.com/redirect")
     with pytest.raises(ValueError, match="url"):
         Deal.from_hit(hit, retailer="homedepot")

@@ -1,0 +1,90 @@
+import json
+from unittest.mock import MagicMock
+
+from deal_dash.lambdas.embedder.handler import handler
+
+
+def _stream_record(event_name: str = "INSERT", item_id: str = "012345678901#123") -> dict:
+    return {
+        "eventName": event_name,
+        "dynamodb": {
+            "NewImage": {
+                "retailer": {"S": "homedepot"},
+                "item_id": {"S": item_id},
+                "title": {"S": "Padlock Steel 2in"},
+                "price": {"N": "1.17"},
+                "discount": {"N": "91"},
+                "category": {"S": "Hardware"},
+                "subcategory": {"S": "Padlocks"},
+            }
+        },
+    }
+
+
+def _bedrock_mock(vector: list[float]) -> MagicMock:
+    mock = MagicMock()
+    body = MagicMock()
+    body.read.return_value = json.dumps({"embedding": vector}).encode()
+    mock.invoke_model.return_value = {"body": body}
+    return mock
+
+
+def test_handler_skips_delete():
+    bedrock = MagicMock()
+    s3v = MagicMock()
+    handler({"Records": [_stream_record("REMOVE")]}, None, _bedrock=bedrock, _s3vectors=s3v)
+    bedrock.invoke_model.assert_not_called()
+    s3v.put_vectors.assert_not_called()
+
+
+def test_handler_embeds_and_stores_on_insert():
+    vector = [0.1] * 256
+    bedrock = _bedrock_mock(vector)
+    s3v = MagicMock()
+
+    handler({"Records": [_stream_record("INSERT")]}, None, _bedrock=bedrock, _s3vectors=s3v)
+
+    bedrock.invoke_model.assert_called_once()
+    call_kw = bedrock.invoke_model.call_args.kwargs
+    assert call_kw["modelId"] == "amazon.titan-embed-text-v2:0"
+    body = json.loads(call_kw["body"])
+    assert body["inputText"] == "Padlock Steel 2in Hardware Padlocks"
+    assert body["dimensions"] == 256
+
+    s3v.put_vectors.assert_called_once()
+    kw = s3v.put_vectors.call_args.kwargs
+    assert kw["vectorBucketName"] == "deal-dash-vectors"
+    assert kw["vectorIndexName"] == "deals"
+    vec = kw["vectors"][0]
+    assert vec["key"] == "012345678901#123"
+    assert vec["data"]["float32"] == vector
+    assert vec["metadata"]["retailer"] == "homedepot"
+    assert vec["metadata"]["discount"] == 91
+    assert vec["metadata"]["price"] == 1.17
+
+
+def test_handler_embeds_on_modify():
+    vector = [0.2] * 256
+    bedrock = _bedrock_mock(vector)
+    s3v = MagicMock()
+
+    handler({"Records": [_stream_record("MODIFY")]}, None, _bedrock=bedrock, _s3vectors=s3v)
+
+    bedrock.invoke_model.assert_called_once()
+    s3v.put_vectors.assert_called_once()
+
+
+def test_handler_processes_multiple_records():
+    vector = [0.1] * 256
+    bedrock = _bedrock_mock(vector)
+    s3v = MagicMock()
+
+    handler(
+        {"Records": [_stream_record("INSERT", "aaa#1"), _stream_record("INSERT", "bbb#2")]},
+        None,
+        _bedrock=bedrock,
+        _s3vectors=s3v,
+    )
+
+    assert bedrock.invoke_model.call_count == 2
+    assert s3v.put_vectors.call_count == 2

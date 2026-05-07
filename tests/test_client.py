@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pytest_httpx import HTTPXMock
 
-from deal_dash.clients.rebel_savings import RebelsavingsClient
-from deal_dash.models import Deal
+from deal_dash.rebel_savings.client import RebelsavingsClient
+from deal_dash.rebel_savings.models import Deal
 
 
 SESSION_COOKIE = "fake-session-token"
@@ -25,9 +25,19 @@ def _make_hit(
     discount: int = 91,
     link: str = "https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F123",
     category: str = "Hardware",
+    subcategory: str = "Padlocks",
     stock: int = 3,
+    upc: str = "012345678901",
+    store: int = 123,
+    address: str = "1234 Main St",
+    city: str = "Austin",
+    state: str = "TX",
 ) -> dict[str, object]:
-    return {"document": {"title": title, "price": price, "discount": discount, "link": link, "category": category, "stock": stock}}
+    return {"document": {
+        "title": title, "price": price, "discount": discount, "link": link,
+        "category": category, "subcategory": subcategory, "stock": stock,
+        "upc": upc, "store": store, "address": address, "city": city, "state": state,
+    }}
 
 
 @pytest.fixture
@@ -111,7 +121,7 @@ async def test_search_fetches_cookie_lazily(httpx_mock: HTTPXMock, api_page_1):
         json=api_page_1,
     )
     with patch(
-        "deal_dash.clients.rebel_savings.get_session_cookie",
+        "deal_dash.rebel_savings.client.get_session_cookie",
         new=AsyncMock(return_value="lazy-token"),
     ):
         c = RebelsavingsClient()
