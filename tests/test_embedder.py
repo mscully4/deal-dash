@@ -54,14 +54,14 @@ def test_handler_embeds_and_stores_on_insert():
     s3v.put_vectors.assert_called_once()
     kw = s3v.put_vectors.call_args.kwargs
     assert kw["vectorBucketName"] == "deal-dash-vectors"
-    assert kw["vectorIndexName"] == "deals"
+    assert kw["indexName"] == "deals"
     vec = kw["vectors"][0]
     assert vec["key"] == "012345678901"
     assert vec["data"]["float32"] == vector
     assert vec["metadata"]["retailer"] == "homedepot"
     assert vec["metadata"]["discount"] == 91
     assert vec["metadata"]["price"] == 1.17
-    assert "liked" in vec["metadata"]
+    assert "liked" not in vec["metadata"]
 
 
 def test_handler_embeds_on_modify():

@@ -1,7 +1,9 @@
 import { Duration, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
 import { AttributeType, BillingMode, StreamViewType, Table } from "aws-cdk-lib/aws-dynamodb";
+import { Rule, Schedule } from "aws-cdk-lib/aws-events";
+import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { Code, Function, Runtime, StartingPosition } from "aws-cdk-lib/aws-lambda";
+import { Code, DockerImageCode, DockerImageFunction, Function, Runtime, StartingPosition } from "aws-cdk-lib/aws-lambda";
 import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { CfnIndex, CfnVectorBucket } from "aws-cdk-lib/aws-s3vectors";
 import { Construct } from "constructs";
@@ -72,5 +74,21 @@ export class RebelSavingsStack extends Stack {
         bisectBatchOnError: true,
       })
     );
+
+    const scraper = new DockerImageFunction(this, "ScraperLambda", {
+      code: DockerImageCode.fromImageAsset("."),
+      timeout: Duration.minutes(10),
+      memorySize: 1024,
+      environment: {
+        DEALS_TABLE: this.dealsTable.tableName,
+      },
+    });
+
+    this.dealsTable.grantWriteData(scraper);
+
+    new Rule(this, "ScraperSchedule", {
+      schedule: Schedule.rate(Duration.hours(1)),
+      targets: [new LambdaFunction(scraper)],
+    });
   }
 }

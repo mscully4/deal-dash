@@ -14,18 +14,18 @@ _DIMENSIONS = 256
 _deserializer = TypeDeserializer()
 
 
-def _deserialize(image: dict) -> dict:
+def _deserialize(image: dict[str, Any]) -> dict[str, Any]:
     return {k: _deserializer.deserialize(v) for k, v in image.items()}
 
 
 def _embed(text: str, bedrock: Any) -> list[float]:
     body = json.dumps({"inputText": text, "dimensions": _DIMENSIONS, "normalize": True})
     resp = bedrock.invoke_model(modelId=_MODEL_ID, body=body)
-    return json.loads(resp["body"].read())["embedding"]
+    return list(json.loads(resp["body"].read())["embedding"])
 
 
 def handler(
-    event: dict,
+    event: dict[str, Any],
     context: object,
     *,
     _bedrock: Any = None,
@@ -40,18 +40,17 @@ def handler(
         doc = _deserialize(record["dynamodb"]["NewImage"])
         text = f"{doc['title']} {doc['category']} {doc.get('subcategory', '')}"
         vector = _embed(text, bedrock)
+        metadata: dict[str, Any] = {
+            "retailer": doc["retailer"],
+            "category": doc["category"],
+            "discount": int(doc["discount"]),
+            "price": float(doc["price"]),
+        }
+        liked = doc.get("liked")
+        if isinstance(liked, bool):
+            metadata["liked"] = liked
         s3v.put_vectors(
             vectorBucketName=_VECTOR_BUCKET,
-            vectorIndexName=_VECTOR_INDEX,
-            vectors=[{
-                "key": doc["upc"],
-                "data": {"float32": vector},
-                "metadata": {
-                    "retailer": doc["retailer"],
-                    "category": doc["category"],
-                    "discount": int(doc["discount"]),
-                    "price": float(doc["price"]),
-                    "liked": None,
-                },
-            }],
+            indexName=_VECTOR_INDEX,
+            vectors=[{"key": doc["upc"], "data": {"float32": vector}, "metadata": metadata}],
         )

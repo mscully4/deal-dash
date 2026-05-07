@@ -1,4 +1,5 @@
 import os
+import time
 from decimal import Decimal
 from typing import Any
 
@@ -36,5 +37,6 @@ class DealStore:
                 "address": deal.address,
                 "city": deal.city,
                 "state": deal.state,
+                "last_updated": int(time.time()),
             }
         )

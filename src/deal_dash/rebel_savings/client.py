@@ -4,8 +4,10 @@ from typing import Any
 
 import httpx
 
+from deal_dash.rebel_savings.constants import RETAILER_META
 from deal_dash.rebel_savings.models import Deal
 from deal_dash.rebel_savings.session import get_session_cookie
+
 
 _SEARCH_URL = "https://www.rebelsavings.com/api/search"
 _PER_PAGE = 100
@@ -13,15 +15,6 @@ _USER_AGENT = (
     "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
 )
-
-# Maps CLI retailer name → (API code, site path for Referer header)
-_RETAILER_META: dict[str, tuple[str, str]] = {
-    "homedepot": ("hd", "home-depot"),
-    "lowes": ("lowes", "lowes"),
-    "walmart": ("walmart", "walmart"),
-    "walgreens": ("walgreens", "walgreens"),
-    "tractorsupply": ("tsc", "tractor-supply"),
-}
 
 
 class RebelsavingsClient:
@@ -38,7 +31,7 @@ class RebelsavingsClient:
     ) -> AsyncGenerator[dict[str, Any], None]:
         if self._cookie is None:
             self._cookie = await get_session_cookie(retailer)
-        api_code, site_path = _RETAILER_META.get(retailer, (retailer, retailer))
+        api_code, site_path = RETAILER_META.get(retailer, (retailer, retailer))
         filter_by = f"stock:>0 && location_geo:({lat}, {lon}, {radius_mi:g} mi)"
         if since_ts is not None:
             filter_by += f" && dateAdded:>{since_ts}"

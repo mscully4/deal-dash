@@ -1,7 +1,8 @@
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from pydantic import BaseModel, computed_field, model_validator
-from typing import Any
+from pydantic import BaseModel, computed_field
+
 
 class Deal(BaseModel):
     title: str
