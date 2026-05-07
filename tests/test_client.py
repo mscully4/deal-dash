@@ -19,11 +19,11 @@ def client():
     return c
 
 
-def _make_hit(
+def _make_doc(
     title: str = "Padlock Steel 2in",
     price: float = 1.17,
     discount: int = 91,
-    link: str = "https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F123",
+    link: str = "https://www.homedepot.com/p/Some-123?store=6541",
     category: str = "Hardware",
     subcategory: str = "Padlocks",
     stock: int = 3,
@@ -33,16 +33,25 @@ def _make_hit(
     city: str = "Austin",
     state: str = "TX",
 ) -> dict[str, object]:
-    return {"document": {
+    return {
         "title": title, "price": price, "discount": discount, "link": link,
         "category": category, "subcategory": subcategory, "stock": stock,
         "upc": upc, "store": store, "address": address, "city": city, "state": state,
-    }}
+    }
+
+
+def _make_grouped_page(docs: list[dict], found: int | None = None) -> dict:
+    if found is None:
+        found = len(docs)
+    return {
+        "found": found,
+        "grouped_hits": [{"group_key": [d["title"]], "hits": [{"document": d, "highlight": {}, "highlights": []}]} for d in docs],
+    }
 
 
 @pytest.fixture
 def api_page_1():
-    return {"found": 1, "hits": [_make_hit()]}
+    return _make_grouped_page([_make_doc()])
 
 
 async def test_search_returns_deals(httpx_mock: HTTPXMock, client, api_page_1):
@@ -72,26 +81,19 @@ async def test_search_sends_correct_payload(httpx_mock: HTTPXMock, client, api_p
 
     request = httpx_mock.get_request()
     body = json.loads(request.content)
-    assert body["retailer"] == "homedepot"
-    assert body["sortBy"] == "discount:desc"
+    assert body["retailer"] == "hd"
+    assert body["sortBy"] == "dateAdded:desc"
     assert "location_geo:(30.5083, -97.6789, 25 mi)" in body["filterBy"]
     assert body["perPage"] == 100
     assert body["page"] == 1
     assert body["query"] == "*"
+    assert body["groupBy"] == "title"
 
 
 async def test_search_paginates(httpx_mock: HTTPXMock, client):
-    page_hit = _make_hit(
-        title="Item",
-        price=1.0,
-        discount=50,
-        link="https://www.rebelsavings.com/redirect?url=https%3A%2F%2Fwww.homedepot.com%2Fp%2F1",
-        category="Tools",
-        stock=1,
-    )
-    # 101 total found, perPage=100 → 2 pages
-    httpx_mock.add_response(json={"found": 101, "hits": [page_hit] * 100})
-    httpx_mock.add_response(json={"found": 101, "hits": [page_hit]})
+    doc = _make_doc(title="Item", price=1.0, discount=50, category="Tools", stock=1)
+    httpx_mock.add_response(json=_make_grouped_page([doc] * 100, found=101))
+    httpx_mock.add_response(json=_make_grouped_page([doc], found=101))
 
     deals = []
     async for deal in client.search("homedepot", LAT, LON, RADIUS):

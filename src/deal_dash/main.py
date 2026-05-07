@@ -1,4 +1,6 @@
 import asyncio
+import json
+from datetime import datetime, timedelta, timezone
 
 import click
 import zipcodes
@@ -18,14 +20,28 @@ def _zip_to_latlon(zip_code: str) -> tuple[float, float]:
     return float(rec["lat"]), float(rec["long"])
 
 
-async def _run(retailer: str, zip_code: str, radius: float, min_discount: int) -> None:
-    click.echo(f"Fetching {retailer} clearance deals near {zip_code}...")
+async def _run(retailer: str, zip_code: str, radius: float, min_discount: int, days: int | None, debug_raw: bool, debug_count: int) -> None:
     lat, lon = _zip_to_latlon(zip_code)
+    since_ts: int | None = None
+    if days is not None:
+        since_ts = int((datetime.now(timezone.utc) - timedelta(days=days)).timestamp())
+
     client = RebelsavingsClient()
+
+    if debug_raw:
+        seen = 0
+        async for raw in client.search_raw(retailer, lat, lon, radius, since_ts):
+            click.echo(json.dumps(raw, indent=2, default=str))
+            seen += 1
+            if seen >= debug_count:
+                return
+        return
+
+    click.echo(f"Fetching {retailer} clearance deals near {zip_code}...")
     store = DealStore()
 
     deals = []
-    async for deal in client.search(retailer, lat, lon, radius):
+    async for deal in client.search(retailer, lat, lon, radius, since_ts):
         store.put_deal(deal)
         if deal.discount >= min_discount:
             deals.append(deal)
@@ -54,6 +70,9 @@ async def _run(retailer: str, zip_code: str, radius: float, min_discount: int) -
 )
 @click.option("--radius", default=25.0, show_default=True, help="Search radius in miles")
 @click.option("--min-discount", default=0, show_default=True, help="Minimum discount %%")
-def cli(zip_code: str, retailer: str, radius: float, min_discount: int) -> None:
+@click.option("--days", default=None, type=int, help="Only show deals added in the last N days")
+@click.option("--debug-raw", is_flag=True, default=False, help="Print raw API hits as JSON and exit")
+@click.option("--debug-count", default=10, show_default=True, help="Number of raw hits to print with --debug-raw")
+def cli(zip_code: str, retailer: str, radius: float, min_discount: int, days: int | None, debug_raw: bool, debug_count: int) -> None:
     """Fetch clearance deals from rebelsavings.com sorted by discount."""
-    asyncio.run(_run(retailer, zip_code, radius, min_discount))
+    asyncio.run(_run(retailer, zip_code, radius, min_discount, days, debug_raw, debug_count))

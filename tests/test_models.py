@@ -35,7 +35,7 @@ def test_deal_from_api_hit():
     assert deal.item_id == "012345678901#123"
 
 
-def test_deal_from_hit_missing_link_raises():
-    hit = _make_hit(link="https://www.rebelsavings.com/redirect")
-    with pytest.raises(ValueError, match="url"):
-        Deal.from_hit(hit, retailer="homedepot")
+def test_deal_from_hit_direct_link():
+    link = "https://www.homedepot.com/p/Some-Product-123/456789?store=6541"
+    deal = Deal.from_hit(_make_hit(link=link), retailer="homedepot")
+    assert deal.url == link

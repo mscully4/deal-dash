@@ -4,13 +4,13 @@ from unittest.mock import MagicMock
 from deal_dash.lambdas.embedder.handler import handler
 
 
-def _stream_record(event_name: str = "INSERT", item_id: str = "012345678901#123") -> dict:
+def _stream_record(event_name: str = "INSERT", upc: str = "012345678901") -> dict:
     return {
         "eventName": event_name,
         "dynamodb": {
             "NewImage": {
                 "retailer": {"S": "homedepot"},
-                "item_id": {"S": item_id},
+                "upc": {"S": upc},
                 "title": {"S": "Padlock Steel 2in"},
                 "price": {"N": "1.17"},
                 "discount": {"N": "91"},
@@ -56,11 +56,12 @@ def test_handler_embeds_and_stores_on_insert():
     assert kw["vectorBucketName"] == "deal-dash-vectors"
     assert kw["vectorIndexName"] == "deals"
     vec = kw["vectors"][0]
-    assert vec["key"] == "012345678901#123"
+    assert vec["key"] == "012345678901"
     assert vec["data"]["float32"] == vector
     assert vec["metadata"]["retailer"] == "homedepot"
     assert vec["metadata"]["discount"] == 91
     assert vec["metadata"]["price"] == 1.17
+    assert "liked" in vec["metadata"]
 
 
 def test_handler_embeds_on_modify():
@@ -80,7 +81,7 @@ def test_handler_processes_multiple_records():
     s3v = MagicMock()
 
     handler(
-        {"Records": [_stream_record("INSERT", "aaa#1"), _stream_record("INSERT", "bbb#2")]},
+        {"Records": [_stream_record("INSERT", "aaa111"), _stream_record("INSERT", "bbb222")]},
         None,
         _bedrock=bedrock,
         _s3vectors=s3v,

@@ -44,13 +44,14 @@ def handler(
             vectorBucketName=_VECTOR_BUCKET,
             vectorIndexName=_VECTOR_INDEX,
             vectors=[{
-                "key": doc["item_id"],
+                "key": doc["upc"],
                 "data": {"float32": vector},
                 "metadata": {
                     "retailer": doc["retailer"],
                     "category": doc["category"],
                     "discount": int(doc["discount"]),
                     "price": float(doc["price"]),
+                    "liked": None,
                 },
             }],
         )
