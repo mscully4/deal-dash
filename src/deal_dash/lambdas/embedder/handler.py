@@ -1,7 +1,7 @@
 import json
 import time
 from collections.abc import Callable
-from functools import wraps
+from functools import wraps, lru_cache
 from typing import Any, TypeVar, cast
 
 import boto3
@@ -17,11 +17,9 @@ from deal_dash.environment import Environment
 _env = Environment.from_environment()
 logger = _env.create_logger(__name__)
 
-_NOTIFY_RETAILERS = {"homedepot"}
+_NOTIFY_RETAILERS: set[str] = {"homedepot"}
 _MODEL_ID = "amazon.titan-embed-text-v2:0"
 _DIMENSIONS = 256
-
-_bot_token: str | None = None
 
 _notified_upcs: dict[str, float] = {}
 
@@ -38,20 +36,14 @@ def _mark_notified(upc: str) -> None:
     _notified_upcs[upc] = time.time()
 
 
-_F = TypeVar("_F", bound=Callable[..., Any])
-
-
+@lru_cache
 def _get_bot_token() -> str:
-    global _bot_token
-    if _bot_token is None:
-        sm = boto3.client("secretsmanager", region_name=_env.aws_region)
-        _bot_token = sm.get_secret_value(SecretId=_env.discord_bot_token_arn)["SecretString"]
-    return _bot_token
+    return _env.secrets_manager_client.get_secret_value(SecretId=_env.discord_bot_token_arn)["SecretString"]
 
 
-def _embed(text: str, bedrock: Any) -> list[float]:
+def _embed(text: str) -> list[float]:
     body = json.dumps({"inputText": text, "dimensions": _DIMENSIONS, "normalize": True})
-    resp = bedrock.invoke_model(modelId=_MODEL_ID, body=body)
+    resp = _env.bedrock_client.invoke_model(modelId=_MODEL_ID, body=body)
     return list(json.loads(resp["body"].read())["embedding"])
 
 
@@ -106,26 +98,11 @@ def _post_to_discord(doc: dict[str, Any]) -> None:
     logger.info("posted to Discord", extra={"upc": doc["upc"], "title": doc["title"]})
 
 
-def _event_source_wrapper(func: _F) -> _F:
-    """Minimal event_source decorator that supports kwargs for testing."""
-
-    @wraps(func)
-    def wrapper(event: dict[str, Any], context: object, **kwargs: Any) -> Any:
-        parsed_event = DynamoDBStreamEvent(event)
-        return func(parsed_event, context, **kwargs)
-
-    return cast(_F, wrapper)
-
-
-@_event_source_wrapper
 def handler(
-    event: DynamoDBStreamEvent,
-    context: object,
-    _bedrock: Any = None,
-    _s3vectors: Any = None,
+    raw_event: dict[str, Any],
+    context: Any,
 ) -> None:
-    bedrock = _bedrock if _bedrock is not None else _env.bedrock_client
-    s3v = _s3vectors if _s3vectors is not None else _env.s3vectors_client
+    event: DynamoDBStreamEvent = DynamoDBStreamEvent(raw_event)
 
     records = list(event.records)
     logger.info("batch received", extra={"size": len(records)})
@@ -154,7 +131,7 @@ def handler(
         )
 
         text = f"{doc['title']} {doc['category']} {doc.get('subcategory', '')}"
-        vector = _embed(text, bedrock)
+        vector = _embed(text)
         metadata: dict[str, Any] = {
             "retailer": retailer,
             "category": doc["category"],
@@ -163,7 +140,7 @@ def handler(
         }
 
         if event_name == DynamoDBRecordEventName.MODIFY:
-            existing = s3v.get_vectors(
+            existing = _env.s3vectors_client.get_vectors(
                 vectorBucketName=_env.vector_bucket,
                 indexName=_env.vector_index,
                 keys=[upc],
@@ -173,7 +150,7 @@ def handler(
             if existing and isinstance(existing[0].get("metadata", {}).get("liked"), bool):
                 metadata["liked"] = existing[0]["metadata"]["liked"]
 
-        s3v.put_vectors(
+        _env.s3vectors_client.put_vectors(
             vectorBucketName=_env.vector_bucket,
             indexName=_env.vector_index,
             vectors=[{"key": upc, "data": {"float32": vector}, "metadata": metadata}],
