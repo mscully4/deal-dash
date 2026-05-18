@@ -1,6 +1,7 @@
 import json
+from collections.abc import Callable
 from functools import wraps
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import boto3
 import httpx
@@ -20,6 +21,8 @@ _MODEL_ID = "amazon.titan-embed-text-v2:0"
 _DIMENSIONS = 256
 
 _bot_token: str | None = None
+
+_F = TypeVar("_F", bound=Callable[..., Any])
 
 
 def _get_bot_token() -> str:
@@ -87,13 +90,15 @@ def _post_to_discord(doc: dict[str, Any]) -> None:
     logger.info("posted to Discord", extra={"upc": doc["upc"], "title": doc["title"]})
 
 
-def _event_source_wrapper(func):
+def _event_source_wrapper(func: _F) -> _F:
     """Minimal event_source decorator that supports kwargs for testing."""
+
     @wraps(func)
-    def wrapper(event, context, **kwargs):
+    def wrapper(event: dict[str, Any], context: object, **kwargs: Any) -> Any:
         parsed_event = DynamoDBStreamEvent(event)
         return func(parsed_event, context, **kwargs)
-    return wrapper
+
+    return cast(_F, wrapper)
 
 
 @_event_source_wrapper
