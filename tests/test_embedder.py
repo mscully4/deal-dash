@@ -1,6 +1,8 @@
 import json
+import time
 from unittest.mock import MagicMock
 
+import deal_dash.lambdas.embedder.handler as _handler_module
 from deal_dash.lambdas.embedder.handler import handler
 
 
@@ -89,3 +91,27 @@ def test_handler_processes_multiple_records():
 
     assert bedrock.invoke_model.call_count == 2
     assert s3v.put_vectors.call_count == 2
+
+
+def test_already_notified_false_for_new_upc():
+    _handler_module._notified_upcs.clear()
+    assert not _handler_module._already_notified("upc-new")
+
+
+def test_mark_notified_then_already_notified():
+    _handler_module._notified_upcs.clear()
+    _handler_module._mark_notified("upc-123")
+    assert _handler_module._already_notified("upc-123")
+
+
+def test_already_notified_expired_entry_returns_false():
+    _handler_module._notified_upcs.clear()
+    _handler_module._notified_upcs["upc-old"] = time.time() - 9000  # 2.5 hours ago
+    assert not _handler_module._already_notified("upc-old")
+
+
+def test_already_notified_purges_stale_entries():
+    _handler_module._notified_upcs.clear()
+    _handler_module._notified_upcs["upc-stale"] = time.time() - 9000
+    _handler_module._already_notified("upc-check")
+    assert "upc-stale" not in _handler_module._notified_upcs

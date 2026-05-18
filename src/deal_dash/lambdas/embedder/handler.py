@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Callable
 from functools import wraps
 from typing import Any, TypeVar, cast
@@ -21,6 +22,21 @@ _MODEL_ID = "amazon.titan-embed-text-v2:0"
 _DIMENSIONS = 256
 
 _bot_token: str | None = None
+
+_notified_upcs: dict[str, float] = {}
+
+
+def _already_notified(upc: str, ttl: int = 7200) -> bool:
+    cutoff = time.time() - ttl
+    stale = [k for k, t in _notified_upcs.items() if t < cutoff]
+    for k in stale:
+        del _notified_upcs[k]
+    return upc in _notified_upcs
+
+
+def _mark_notified(upc: str) -> None:
+    _notified_upcs[upc] = time.time()
+
 
 _F = TypeVar("_F", bound=Callable[..., Any])
 
