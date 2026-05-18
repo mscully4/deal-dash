@@ -175,5 +175,7 @@ def handler(
             and _env.discord_channel_id
             and event_name == DynamoDBRecordEventName.INSERT
             and retailer in _NOTIFY_RETAILERS
+            and not _already_notified(upc)
         ):
             _post_to_discord(doc)
+            _mark_notified(upc)
