@@ -10,12 +10,12 @@ from nacl.signing import VerifyKey
 
 
 _PUBLIC_KEY = os.environ.get("DISCORD_PUBLIC_KEY", "")
-_TABLE_NAME = os.environ.get("DEALS_TABLE", "rebel-savings-deals")
+_VECTOR_BUCKET = os.environ.get("VECTOR_BUCKET", "deal-dash-vectors")
+_VECTOR_INDEX = os.environ.get("VECTOR_INDEX", "deals")
 _REGION = os.environ.get("AWS_REGION", "us-east-2")
 
 _verify_key = VerifyKey(bytes.fromhex(_PUBLIC_KEY)) if _PUBLIC_KEY else None
-_dynamodb = boto3.resource("dynamodb", region_name=_REGION)
-_table = _dynamodb.Table(_TABLE_NAME)
+_s3vectors = boto3.client("s3vectors", region_name=_REGION)
 
 
 def _verify(headers: dict[str, str], body: str) -> bool:
@@ -44,14 +44,25 @@ def handler(event: dict[str, Any], context: object) -> dict[str, Any]:
 
     if data["type"] == 3:  # MESSAGE_COMPONENT (button)
         custom_id: str = data["data"]["custom_id"]
-        action, retailer, item_id = custom_id.split(":", 2)
+        action, upc = custom_id.split(":", 1)
         liked = action == "like"
 
-        _table.update_item(
-            Key={"retailer": retailer, "item_id": item_id},
-            UpdateExpression="SET liked = :val",
-            ExpressionAttributeValues={":val": liked},
+        resp = _s3vectors.get_vectors(
+            vectorBucketName=_VECTOR_BUCKET,
+            indexName=_VECTOR_INDEX,
+            keys=[upc],
+            returnData=True,
+            returnMetadata=True,
         )
+        vectors = resp.get("vectors", [])
+        if vectors:
+            vec = vectors[0]
+            updated_metadata = {**vec.get("metadata", {}), "liked": liked}
+            _s3vectors.put_vectors(
+                vectorBucketName=_VECTOR_BUCKET,
+                indexName=_VECTOR_INDEX,
+                vectors=[{"key": upc, "data": vec["data"], "metadata": updated_metadata}],
+            )
 
         label = "👍 Liked!" if liked else "👎 Disliked!"
         response = {

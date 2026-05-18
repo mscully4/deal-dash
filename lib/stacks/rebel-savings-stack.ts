@@ -98,7 +98,8 @@ export class RebelSavingsStack extends Stack {
       timeout: Duration.seconds(10),
       environment: {
         DISCORD_PUBLIC_KEY: process.env.DISCORD_PUBLIC_KEY ?? "",
-        DEALS_TABLE: this.dealsTable.tableName,
+        VECTOR_BUCKET: "deal-dash-vectors",
+        VECTOR_INDEX: "deals",
       },
     });
 
@@ -107,7 +108,15 @@ export class RebelSavingsStack extends Stack {
       authType: FunctionUrlAuthType.NONE,
     });
 
-    this.dealsTable.grantWriteData(discordHandler);
+    discordHandler.addToRolePolicy(
+      new PolicyStatement({
+        effect: Effect.ALLOW,
+        actions: ["s3vectors:GetVectors", "s3vectors:PutVectors"],
+        resources: [
+          `arn:aws:s3vectors:${this.region}:${this.account}:bucket/deal-dash-vectors/index/deals`,
+        ],
+      })
+    );
 
     const scraper = new DockerImageFunction(this, "ScraperLambda", {
       code: DockerImageCode.fromImageAsset("."),

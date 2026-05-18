@@ -56,7 +56,7 @@ def _embed(text: str, bedrock: Any) -> list[float]:
 
 
 def _post_to_discord(doc: dict[str, Any]) -> None:
-    custom_prefix = f"{doc['retailer']}:{doc['item_id']}"
+    custom_prefix = doc["upc"]
     embed: dict[str, Any] = {
         "title": doc["title"],
         "url": doc["url"],
@@ -161,9 +161,17 @@ def handler(
             "discount": int(doc["discount"]),
             "price": float(doc["price"]),
         }
-        liked = doc.get("liked")
-        if isinstance(liked, bool):
-            metadata["liked"] = liked
+
+        if event_name == DynamoDBRecordEventName.MODIFY:
+            existing = s3v.get_vectors(
+                vectorBucketName=_env.vector_bucket,
+                indexName=_env.vector_index,
+                keys=[upc],
+                returnData=False,
+                returnMetadata=True,
+            ).get("vectors", [])
+            if existing and isinstance(existing[0].get("metadata", {}).get("liked"), bool):
+                metadata["liked"] = existing[0]["metadata"]["liked"]
 
         s3v.put_vectors(
             vectorBucketName=_env.vector_bucket,
