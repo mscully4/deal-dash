@@ -1,15 +1,48 @@
+from __future__ import annotations
+
+import json
+import logging
 import os
+from enum import Enum
 from functools import cached_property
-from typing import Mapping, Self, cast
+from typing import TYPE_CHECKING, Mapping, Self, cast
 
 import boto3
-from mypy_boto3_bedrock_runtime import BedrockRuntimeClient
-from mypy_boto3_dynamodb import DynamoDBServiceResource
-from mypy_boto3_dynamodb.service_resource import Table
-from mypy_boto3_s3vectors import S3VectorsClient
 from pydantic import BaseModel
 from pydantic.fields import FieldInfo
 from pydantic_core import PydanticUndefined
+
+
+if TYPE_CHECKING:
+    from mypy_boto3_bedrock_runtime import BedrockRuntimeClient
+    from mypy_boto3_dynamodb import DynamoDBServiceResource
+    from mypy_boto3_dynamodb.service_resource import Table
+    from mypy_boto3_s3vectors import S3VectorsClient
+
+
+_STANDARD_LOG_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__) | {
+    "message",
+    "asctime",
+}
+
+
+def _json_default(obj: object) -> object:
+    if isinstance(obj, Enum):
+        return obj.name
+    return str(obj)
+
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload: dict[str, object] = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        extras = {k: v for k, v in record.__dict__.items() if k not in _STANDARD_LOG_ATTRS}
+        payload.update(extras)
+        return json.dumps(payload, default=_json_default)
 
 
 def _get_default_or_mapping_item(*, key: str, field: FieldInfo, env: Mapping[str, str]) -> str:
@@ -27,6 +60,8 @@ class Environment(BaseModel):
     rebel_savings_deals_table: str = "rebel-savings-deals"
     vector_bucket: str = "deal-dash-vectors"
     vector_index: str = "deals"
+    discord_bot_token_arn: str = ""
+    discord_channel_id: str = ""
 
     @classmethod
     def from_environment(cls, env: dict[str, str] = dict(os.environ)) -> Self:
@@ -54,3 +89,13 @@ class Environment(BaseModel):
     @cached_property
     def s3vectors_client(self) -> S3VectorsClient:
         return self.boto3_session.client("s3vectors")
+
+    def create_logger(self, name: str, level: int = logging.INFO) -> logging.Logger:
+        logger = logging.getLogger(name)
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            handler.setFormatter(_JsonFormatter())
+            logger.addHandler(handler)
+        logger.setLevel(level)
+        logger.propagate = False
+        return logger

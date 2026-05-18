@@ -1,0 +1,16 @@
+# env / secrets
+.envrc
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+.python-version
+
+# CDK
+cdk.out/
+
+# IDE
+.idea/
+.vscode/

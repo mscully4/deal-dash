@@ -3,9 +3,16 @@ import { AttributeType, BillingMode, StreamViewType, Table } from "aws-cdk-lib/a
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
-import { Code, DockerImageCode, DockerImageFunction, Function, Runtime, StartingPosition } from "aws-cdk-lib/aws-lambda";
+import {
+  DockerImageCode,
+  DockerImageFunction,
+  FunctionUrl,
+  FunctionUrlAuthType,
+  StartingPosition,
+} from "aws-cdk-lib/aws-lambda";
 import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
 import { CfnIndex, CfnVectorBucket } from "aws-cdk-lib/aws-s3vectors";
+import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 
 export class RebelSavingsStack extends Stack {
@@ -36,16 +43,25 @@ export class RebelSavingsStack extends Stack {
     });
     vectorIndex.addDependency(vectorBucket);
 
-    const embedder = new Function(this, "EmbedderLambda", {
-      runtime: Runtime.PYTHON_3_12,
-      handler: "handler.handler",
-      code: Code.fromAsset("src/deal_dash/lambdas/embedder"),
+    const discordBotToken = new Secret(this, "DiscordBotToken", {
+      secretName: "deal-dash/discord-bot-token",
+      description: "Discord bot token for deal-dash",
+    });
+
+    const embedder = new DockerImageFunction(this, "EmbedderLambda", {
+      code: DockerImageCode.fromImageAsset(".", {
+        cmd: ["deal_dash.lambdas.embedder.handler.handler"],
+      }),
       timeout: Duration.seconds(60),
       environment: {
-        VECTOR_BUCKET_NAME: "deal-dash-vectors",
-        VECTOR_INDEX_NAME: "deals",
+        VECTOR_BUCKET: "deal-dash-vectors",
+        VECTOR_INDEX: "deals",
+        DISCORD_BOT_TOKEN_ARN: discordBotToken.secretArn,
+        DISCORD_CHANNEL_ID: process.env.DISCORD_CHANNEL_ID ?? "",
       },
     });
+
+    discordBotToken.grantRead(embedder);
 
     embedder.addToRolePolicy(
       new PolicyStatement({
@@ -74,6 +90,24 @@ export class RebelSavingsStack extends Stack {
         bisectBatchOnError: true,
       })
     );
+
+    const discordHandler = new DockerImageFunction(this, "DiscordHandlerLambda", {
+      code: DockerImageCode.fromImageAsset(".", {
+        cmd: ["deal_dash.lambdas.discord_handler.handler.handler"],
+      }),
+      timeout: Duration.seconds(10),
+      environment: {
+        DISCORD_PUBLIC_KEY: process.env.DISCORD_PUBLIC_KEY ?? "",
+        DEALS_TABLE: this.dealsTable.tableName,
+      },
+    });
+
+    new FunctionUrl(this, "DiscordHandlerUrl", {
+      function: discordHandler,
+      authType: FunctionUrlAuthType.NONE,
+    });
+
+    this.dealsTable.grantWriteData(discordHandler);
 
     const scraper = new DockerImageFunction(this, "ScraperLambda", {
       code: DockerImageCode.fromImageAsset("."),
