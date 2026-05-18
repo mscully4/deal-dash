@@ -147,7 +147,11 @@ def handler(
                 returnData=False,
                 returnMetadata=True,
             ).get("vectors", [])
-            if existing and "metadata" in existing[0] and isinstance(existing[0].get("metadata", {}).get("liked"), bool):
+            if (
+                existing
+                and "metadata" in existing[0]
+                and isinstance(existing[0].get("metadata", {}).get("liked"), bool)
+            ):
                 metadata["liked"] = existing[0]["metadata"]["liked"]
 
         _env.s3vectors_client.put_vectors(
