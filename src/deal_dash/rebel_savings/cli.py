@@ -77,8 +77,15 @@ async def _run(
 @click.option("--radius", default=25.0, show_default=True, help="Search radius in miles")
 @click.option("--min-discount", default=0, show_default=True, help="Minimum discount %%")
 @click.option("--days", default=None, type=int, help="Only show deals added in the last N days")
-@click.option("--debug-raw", is_flag=True, default=False, help="Print raw API hits as JSON and exit")  # noqa: E501
-@click.option("--debug-count", default=10, show_default=True, help="Number of raw hits to print with --debug-raw")  # noqa: E501
+@click.option(
+    "--debug-raw", is_flag=True, default=False, help="Print raw API hits as JSON and exit"
+)  # noqa: E501
+@click.option(
+    "--debug-count",
+    default=10,
+    show_default=True,
+    help="Number of raw hits to print with --debug-raw",
+)  # noqa: E501
 def cli(
     zip_code: str,
     retailer: str,
