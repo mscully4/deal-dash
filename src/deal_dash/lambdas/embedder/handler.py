@@ -132,6 +132,8 @@ def handler(
 
     for record in records:
         event_name = record.event_name
+        if event_name is None:
+            continue
         if event_name not in (DynamoDBRecordEventName.INSERT, DynamoDBRecordEventName.MODIFY):
             logger.info("skipping event", extra={"event": event_name.name})
             continue
