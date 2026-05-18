@@ -1,6 +1,9 @@
 # env / secrets
 .envrc
 
+# NPM
+node_modules
+
 # Python
 __pycache__/
 *.pyc
