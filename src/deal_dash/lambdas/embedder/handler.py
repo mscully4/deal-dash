@@ -47,22 +47,27 @@ def _embed(text: str) -> list[float]:
     return list(json.loads(resp["body"].read())["embedding"])
 
 
-def _post_to_discord(doc: dict[str, Any]) -> None:
+def _post_to_discord(doc: dict[str, Any], liked: bool | None = None) -> None:
     custom_prefix = doc["upc"]
+    fields: list[dict[str, Any]] = [
+        {"name": "Price", "value": f"${float(doc['price']):.2f}", "inline": True},
+        {"name": "Discount", "value": f"{doc['discount']}% off", "inline": True},
+        {"name": "Category", "value": doc["category"], "inline": True},
+        {
+            "name": "Location",
+            "value": f"{doc['address']}, {doc['city']}, {doc['state']}",
+            "inline": True,
+        },
+    ]
+    if liked is True:
+        fields.append({"name": "Status", "value": "👍 Previously liked", "inline": True})
+    elif liked is False:
+        fields.append({"name": "Status", "value": "👎 Previously disliked", "inline": True})
     embed: dict[str, Any] = {
         "title": doc["title"],
         "url": doc["url"],
         "color": 0x2ECC71,
-        "fields": [
-            {"name": "Price", "value": f"${float(doc['price']):.2f}", "inline": True},
-            {"name": "Discount", "value": f"{doc['discount']}% off", "inline": True},
-            {"name": "Category", "value": doc["category"], "inline": True},
-            {
-                "name": "Location",
-                "value": f"{doc['address']}, {doc['city']}, {doc['state']}",
-                "inline": True,
-            },
-        ],
+        "fields": fields,
     }
     if image_url := doc.get("image_url"):
         embed["image"] = {"url": image_url}
@@ -139,20 +144,19 @@ def handler(
             "price": float(doc["price"]),
         }
 
-        if event_name == DynamoDBRecordEventName.MODIFY:
-            existing = _env.s3vectors_client.get_vectors(
-                vectorBucketName=_env.vector_bucket,
-                indexName=_env.vector_index,
-                keys=[upc],
-                returnData=False,
-                returnMetadata=True,
-            ).get("vectors", [])
-            if (
-                existing
-                and "metadata" in existing[0]
-                and isinstance(existing[0].get("metadata", {}).get("liked"), bool)
-            ):
-                metadata["liked"] = existing[0]["metadata"]["liked"]
+        existing = _env.s3vectors_client.get_vectors(
+            vectorBucketName=_env.vector_bucket,
+            indexName=_env.vector_index,
+            keys=[upc],
+            returnData=False,
+            returnMetadata=True,
+        ).get("vectors", [])
+        existing_liked: bool | None = None
+        if existing:
+            liked_val = existing[0].get("metadata", {}).get("liked")
+            if isinstance(liked_val, bool):
+                existing_liked = liked_val
+                metadata["liked"] = existing_liked
 
         _env.s3vectors_client.put_vectors(
             vectorBucketName=_env.vector_bucket,
@@ -166,7 +170,7 @@ def handler(
             and _env.discord_channel_id
             and event_name == DynamoDBRecordEventName.INSERT
             and retailer in _NOTIFY_RETAILERS
-            # and not _already_notified(upc)
+            and not _already_notified(upc)
         ):
-            _post_to_discord(doc)
+            _post_to_discord(doc, liked=existing_liked)
             _mark_notified(upc)

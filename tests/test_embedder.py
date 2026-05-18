@@ -173,7 +173,7 @@ def test_handler_deduplicates_same_upc_across_stores(monkeypatch):
     _handler_module._notified_upcs.clear()
     discord_calls: list[dict] = []
     env, s3v = _make_env([0.1] * 256, discord_bot_token_arn="arn:fake", discord_channel_id="111222333")
-    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc: discord_calls.append(doc))
+    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc, liked=None: discord_calls.append(doc))
     monkeypatch.setattr(_handler_module, "_env", env)
 
     handler(
@@ -196,7 +196,7 @@ def test_handler_different_upcs_each_get_discord_post(monkeypatch):
     _handler_module._notified_upcs.clear()
     discord_calls: list[dict] = []
     env, s3v = _make_env([0.1] * 256, discord_bot_token_arn="arn:fake", discord_channel_id="111222333")
-    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc: discord_calls.append(doc))
+    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc, liked=None: discord_calls.append(doc))
     monkeypatch.setattr(_handler_module, "_env", env)
 
     handler(
@@ -210,3 +210,53 @@ def test_handler_different_upcs_each_get_discord_post(monkeypatch):
     )
 
     assert len(discord_calls) == 2
+
+
+def test_handler_insert_preserves_liked_in_metadata(monkeypatch):
+    env, s3v = _make_env([0.1] * 256)
+    s3v.get_vectors.return_value = {
+        "vectors": [{"metadata": {"retailer": "homedepot", "liked": True}}]
+    }
+    monkeypatch.setattr(_handler_module, "_env", env)
+
+    handler({"Records": [_stream_record("INSERT")]}, None)
+
+    kw = s3v.put_vectors.call_args.kwargs
+    assert kw["vectors"][0]["metadata"]["liked"] is True
+
+
+def test_handler_insert_passes_liked_to_discord(monkeypatch):
+    _handler_module._notified_upcs.clear()
+    discord_calls: list[tuple] = []
+    env, s3v = _make_env([0.1] * 256, discord_bot_token_arn="arn:fake", discord_channel_id="111")
+    s3v.get_vectors.return_value = {
+        "vectors": [{"metadata": {"retailer": "homedepot", "liked": True}}]
+    }
+    monkeypatch.setattr(
+        _handler_module,
+        "_post_to_discord",
+        lambda doc, liked=None: discord_calls.append((doc, liked)),
+    )
+    monkeypatch.setattr(_handler_module, "_env", env)
+
+    handler({"Records": [_full_stream_record("INSERT")]}, None)
+
+    assert len(discord_calls) == 1
+    assert discord_calls[0][1] is True
+
+
+def test_handler_insert_passes_none_liked_when_no_history(monkeypatch):
+    _handler_module._notified_upcs.clear()
+    discord_calls: list[tuple] = []
+    env, s3v = _make_env([0.1] * 256, discord_bot_token_arn="arn:fake", discord_channel_id="111")
+    monkeypatch.setattr(
+        _handler_module,
+        "_post_to_discord",
+        lambda doc, liked=None: discord_calls.append((doc, liked)),
+    )
+    monkeypatch.setattr(_handler_module, "_env", env)
+
+    handler({"Records": [_full_stream_record("INSERT")]}, None)
+
+    assert len(discord_calls) == 1
+    assert discord_calls[0][1] is None
