@@ -1,0 +1,2 @@
+#!/bin/sh
+uv run ruff format src && uv run ruff check src && uv run mypy src && npm run format:check

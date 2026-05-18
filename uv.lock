@@ -239,6 +239,7 @@ dependencies = [
     { name = "boto3" },
     { name = "click" },
     { name = "httpx" },
+    { name = "mypy-boto3-secretsmanager" },
     { name = "playwright" },
     { name = "pydantic" },
     { name = "pynacl" },
@@ -261,6 +262,7 @@ requires-dist = [
     { name = "boto3", specifier = ">=1.34" },
     { name = "click", specifier = ">=8.1" },
     { name = "httpx", specifier = ">=0.27" },
+    { name = "mypy-boto3-secretsmanager", specifier = ">=1.43.0" },
     { name = "playwright", specifier = "==1.50.0" },
     { name = "pydantic", specifier = ">=2.0" },
     { name = "pynacl", specifier = ">=1.5" },
@@ -517,6 +519,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/2f/4d/c9a7ad7d16c5c267f5833f0141b116f9439661fd775a1e3104401b7c74cf/mypy_boto3_s3vectors-1.43.0.tar.gz", hash = "sha256:7e3fece57d3906cbeabb8bdb5bb5e730385ae904199f7e135cd881c53adc6d5d", size = 18555, upload-time = "2026-04-29T23:05:24.473Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/3e/3b524ec422bbfac7202a2f2c9c14c3e7c3e70a212f0f801a32fbe69ecfce/mypy_boto3_s3vectors-1.43.0-py3-none-any.whl", hash = "sha256:5e4a2dd0fc50ef07a6ab86a559c8af31d92c21fa903828ba2c5b2abfb18b668c", size = 24564, upload-time = "2026-04-29T23:05:22.741Z" },
+]
+
+[[package]]
+name = "mypy-boto3-secretsmanager"
+version = "1.43.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c6/e0/3b9f954dcce063407224e6601ed5af2d684185387b0572901c5f984fc8f6/mypy_boto3_secretsmanager-1.43.0.tar.gz", hash = "sha256:265ee2fddf9d3e42ae39685625fb7861a539110d8e324372847c0e1cbd666b20", size = 19967, upload-time = "2026-04-29T23:05:45.139Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4f/93/ae939d61eed240972553395b5e31f780825685b99f0ab4ebe5767430f103/mypy_boto3_secretsmanager-1.43.0-py3-none-any.whl", hash = "sha256:38415cdecb73dd20e485707a7cf456f6dde54ff4b155e7fb255eb001eb47d5bc", size = 27335, upload-time = "2026-04-29T23:05:43.152Z" },
 ]
 
 [[package]]

@@ -1,10 +1,8 @@
 import json
 import time
-from collections.abc import Callable
-from functools import wraps, lru_cache
-from typing import Any, TypeVar, cast
+from functools import lru_cache
+from typing import Any
 
-import boto3
 import httpx
 from aws_lambda_powertools.utilities.data_classes import DynamoDBStreamEvent
 from aws_lambda_powertools.utilities.data_classes.dynamo_db_stream_event import (
@@ -38,7 +36,9 @@ def _mark_notified(upc: str) -> None:
 
 @lru_cache
 def _get_bot_token() -> str:
-    return _env.secrets_manager_client.get_secret_value(SecretId=_env.discord_bot_token_arn)["SecretString"]
+    return _env.secrets_manager_client.get_secret_value(SecretId=_env.discord_bot_token_arn)[
+        "SecretString"
+    ]
 
 
 def _embed(text: str) -> list[float]:
@@ -147,7 +147,7 @@ def handler(
                 returnData=False,
                 returnMetadata=True,
             ).get("vectors", [])
-            if existing and isinstance(existing[0].get("metadata", {}).get("liked"), bool):
+            if existing and "metadata" in existing[0] and isinstance(existing[0].get("metadata", {}).get("liked"), bool):
                 metadata["liked"] = existing[0]["metadata"]["liked"]
 
         _env.s3vectors_client.put_vectors(

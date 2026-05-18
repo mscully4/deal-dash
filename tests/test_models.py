@@ -1,4 +1,3 @@
-import pytest
 
 from deal_dash.rebel_savings.models import Deal
 

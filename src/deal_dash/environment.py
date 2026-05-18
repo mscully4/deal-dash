@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from mypy_boto3_dynamodb import DynamoDBServiceResource
     from mypy_boto3_dynamodb.service_resource import Table
     from mypy_boto3_s3vectors import S3VectorsClient
+    from mypy_boto3_secretsmanager import SecretsManagerClient
 
 
 _STANDARD_LOG_ATTRS = frozenset(logging.LogRecord("", 0, "", 0, "", (), None).__dict__) | {
@@ -89,6 +90,10 @@ class Environment(BaseModel):
     @cached_property
     def s3vectors_client(self) -> S3VectorsClient:
         return self.boto3_session.client("s3vectors")
+
+    @cached_property
+    def secrets_manager_client(self) -> SecretsManagerClient:
+        return self.boto3_session.client("secretsmanager")
 
     def create_logger(self, name: str, level: int = logging.INFO) -> logging.Logger:
         logger = logging.getLogger(name)
