@@ -18,6 +18,7 @@ class Deal(BaseModel):
     address: str
     city: str
     state: str
+    image_url: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -43,4 +44,5 @@ class Deal(BaseModel):
             address=hit["address"],
             city=hit["city"],
             state=hit["state"],
+            image_url=hit.get("image_url"),
         )

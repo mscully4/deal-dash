@@ -38,5 +38,6 @@ class DealStore:
                 "city": deal.city,
                 "state": deal.state,
                 "last_updated": int(time.time()),
+                **({"image_url": deal.image_url} if deal.image_url else {}),
             }
         )

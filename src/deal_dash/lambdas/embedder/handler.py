@@ -37,24 +37,21 @@ def _embed(text: str, bedrock: Any) -> list[float]:
 
 def _post_to_discord(doc: dict[str, Any]) -> None:
     custom_prefix = f"{doc['retailer']}:{doc['item_id']}"
-    message = {
-        "embeds": [
-            {
-                "title": doc["title"],
-                "url": doc["url"],
-                "color": 0x2ECC71,
-                "fields": [
-                    {"name": "Price", "value": f"${float(doc['price']):.2f}", "inline": True},
-                    {"name": "Discount", "value": f"{doc['discount']}% off", "inline": True},
-                    {"name": "Category", "value": doc["category"], "inline": True},
-                    {
-                        "name": "Location",
-                        "value": f"{doc['city']}, {doc['state']}",
-                        "inline": True,
-                    },
-                ],
-            }
+    embed: dict[str, Any] = {
+        "title": doc["title"],
+        "url": doc["url"],
+        "color": 0x2ECC71,
+        "fields": [
+            {"name": "Price", "value": f"${float(doc['price']):.2f}", "inline": True},
+            {"name": "Discount", "value": f"{doc['discount']}% off", "inline": True},
+            {"name": "Category", "value": doc["category"], "inline": True},
+            {"name": "Location", "value": f"{doc['address']}, {doc['city']}, {doc['state']}", "inline": True},
         ],
+    }
+    if image_url := doc.get("image_url"):
+        embed["image"] = {"url": image_url}
+    message = {
+        "embeds": [embed],
         "components": [
             {
                 "type": 1,
