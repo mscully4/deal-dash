@@ -1,9 +1,10 @@
 import json
+from functools import wraps
 from typing import Any
 
 import boto3
 import httpx
-from aws_lambda_powertools.utilities.data_classes import DynamoDBStreamEvent, event_source
+from aws_lambda_powertools.utilities.data_classes import DynamoDBStreamEvent
 from aws_lambda_powertools.utilities.data_classes.dynamo_db_stream_event import (
     DynamoDBRecordEventName,
 )
@@ -45,7 +46,11 @@ def _post_to_discord(doc: dict[str, Any]) -> None:
             {"name": "Price", "value": f"${float(doc['price']):.2f}", "inline": True},
             {"name": "Discount", "value": f"{doc['discount']}% off", "inline": True},
             {"name": "Category", "value": doc["category"], "inline": True},
-            {"name": "Location", "value": f"{doc['address']}, {doc['city']}, {doc['state']}", "inline": True},
+            {
+                "name": "Location",
+                "value": f"{doc['address']}, {doc['city']}, {doc['state']}",
+                "inline": True,
+            },
         ],
     }
     if image_url := doc.get("image_url"):
@@ -82,10 +87,24 @@ def _post_to_discord(doc: dict[str, Any]) -> None:
     logger.info("posted to Discord", extra={"upc": doc["upc"], "title": doc["title"]})
 
 
-@event_source(data_class=DynamoDBStreamEvent)  # type: ignore[untyped-decorator]
-def handler(event: DynamoDBStreamEvent, context: object) -> None:
-    bedrock = _env.bedrock_client
-    s3v = _env.s3vectors_client
+def _event_source_wrapper(func):
+    """Minimal event_source decorator that supports kwargs for testing."""
+    @wraps(func)
+    def wrapper(event, context, **kwargs):
+        parsed_event = DynamoDBStreamEvent(event)
+        return func(parsed_event, context, **kwargs)
+    return wrapper
+
+
+@_event_source_wrapper
+def handler(
+    event: DynamoDBStreamEvent,
+    context: object,
+    _bedrock: Any = None,
+    _s3vectors: Any = None,
+) -> None:
+    bedrock = _bedrock if _bedrock is not None else _env.bedrock_client
+    s3v = _s3vectors if _s3vectors is not None else _env.s3vectors_client
 
     records = list(event.records)
     logger.info("batch received", extra={"size": len(records)})
