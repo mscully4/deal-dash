@@ -34,7 +34,7 @@ def _full_stream_record(
                 "upc": {"S": upc},
                 "item_id": {"S": f"{upc}#{store}"},
                 "title": {"S": "Padlock Steel 2in"},
-                "price": {"N": "1.17"},
+                "price": {"N": "29.99"},
                 "discount": {"N": "91"},
                 "category": {"S": "Hardware"},
                 "subcategory": {"S": "Padlocks"},
@@ -62,6 +62,7 @@ def _make_env(
 
     s3v = MagicMock()
     s3v.get_vectors.return_value = {"vectors": []}
+    s3v.query_vectors.return_value = {"vectors": []}
 
     env = MagicMock()
     env.bedrock_client = bedrock
@@ -173,7 +174,7 @@ def test_handler_deduplicates_same_upc_across_stores(monkeypatch):
     _handler_module._notified_upcs.clear()
     discord_calls: list[dict] = []
     env, s3v = _make_env([0.1] * 256, discord_bot_token_arn="arn:fake", discord_channel_id="111222333")
-    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc, liked=None: discord_calls.append(doc))
+    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc, liked=None, similar=None: discord_calls.append(doc))
     monkeypatch.setattr(_handler_module, "_env", env)
 
     handler(
@@ -196,7 +197,7 @@ def test_handler_different_upcs_each_get_discord_post(monkeypatch):
     _handler_module._notified_upcs.clear()
     discord_calls: list[dict] = []
     env, s3v = _make_env([0.1] * 256, discord_bot_token_arn="arn:fake", discord_channel_id="111222333")
-    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc, liked=None: discord_calls.append(doc))
+    monkeypatch.setattr(_handler_module, "_post_to_discord", lambda doc, liked=None, similar=None: discord_calls.append(doc))
     monkeypatch.setattr(_handler_module, "_env", env)
 
     handler(
@@ -235,7 +236,7 @@ def test_handler_insert_passes_liked_to_discord(monkeypatch):
     monkeypatch.setattr(
         _handler_module,
         "_post_to_discord",
-        lambda doc, liked=None: discord_calls.append((doc, liked)),
+        lambda doc, liked=None, similar=None: discord_calls.append((doc, liked)),
     )
     monkeypatch.setattr(_handler_module, "_env", env)
 
@@ -252,7 +253,7 @@ def test_handler_insert_passes_none_liked_when_no_history(monkeypatch):
     monkeypatch.setattr(
         _handler_module,
         "_post_to_discord",
-        lambda doc, liked=None: discord_calls.append((doc, liked)),
+        lambda doc, liked=None, similar=None: discord_calls.append((doc, liked)),
     )
     monkeypatch.setattr(_handler_module, "_env", env)
 

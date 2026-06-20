@@ -1,4 +1,5 @@
 import { Duration, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
 import { AttributeType, BillingMode, StreamViewType, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
@@ -76,7 +77,7 @@ export class RebelSavingsStack extends Stack {
     embedder.addToRolePolicy(
       new PolicyStatement({
         effect: Effect.ALLOW,
-        actions: ["s3vectors:PutVectors"],
+        actions: ["s3vectors:GetVectors", "s3vectors:PutVectors", "s3vectors:QueryVectors"],
         resources: [
           `arn:aws:s3vectors:${this.region}:${this.account}:bucket/deal-dash-vectors/index/deals`,
         ],
@@ -107,6 +108,11 @@ export class RebelSavingsStack extends Stack {
       function: discordHandler,
       authType: FunctionUrlAuthType.NONE,
     });
+
+    const api = new RestApi(this, "DiscordApi", {
+      restApiName: "deal-dash-discord",
+    });
+    api.root.addResource("interactions").addMethod("POST", new LambdaIntegration(discordHandler));
 
     discordHandler.addToRolePolicy(
       new PolicyStatement({

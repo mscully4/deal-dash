@@ -20,7 +20,24 @@ CLI (deal-dash) → RebelsavingsClient → DynamoDB (rebel-savings-deals)
 - **S3 Vectors bucket:** `deal-dash-vectors`, index: `deals`, 256-dim cosine float32
 - **Embedder Lambda:** triggered by DDB stream, embeds title+category, keys vector by UPC
 
-Always run AWS commands with `AWS_PROFILE=default AWS_REGION=us-east-2` or source `.envrc` via direnv.
+Always use `AWS_PROFILE=default --region us-east-2` for AWS CLI commands. The `AWS_REGION` env var does NOT override the profile's configured region (`us-west-2`) — use the `--region` flag instead.
+
+### Lambda functions (us-east-2)
+
+| Function | Log group |
+|----------|-----------|
+| `DealDash-RebelSavingsStac-DiscordHandlerLambda1C0A-Z9FYpKaIjPdC` | `/aws/lambda/DealDash-RebelSavingsStac-DiscordHandlerLambda1C0A-Z9FYpKaIjPdC` |
+| `DealDash-RebelSavingsStack-7-ScraperLambda4C38B115-76E47U8eCqyf` | `/aws/lambda/DealDash-RebelSavingsStack-7-ScraperLambda4C38B115-76E47U8eCqyf` |
+| `DealDash-RebelSavingsStack--EmbedderLambdaA8002AC3-3hB9OqIfpH6M` | `/aws/lambda/DealDash-RebelSavingsStack--EmbedderLambdaA8002AC3-3hB9OqIfpH6M` |
+
+```bash
+# Tail Lambda logs
+AWS_PROFILE=default aws logs get-log-events --region us-east-2 \
+  --log-group-name "/aws/lambda/<function>" \
+  --log-stream-name "$(AWS_PROFILE=default aws logs describe-log-streams --region us-east-2 \
+    --log-group-name '/aws/lambda/<function>' --order-by LastEventTime --descending \
+    --max-items 1 --query 'logStreams[0].logStreamName' --output text)"
+```
 
 ## Commands
 

@@ -1,9 +1,11 @@
+import hashlib
 import json
 import time
 from functools import lru_cache
-from typing import Any
+from typing import Any, cast
 
 import httpx
+from aws_lambda_powertools.metrics import Metrics, MetricUnit
 from aws_lambda_powertools.utilities.data_classes import DynamoDBStreamEvent
 from aws_lambda_powertools.utilities.data_classes.dynamo_db_stream_event import (
     DynamoDBRecordEventName,
@@ -14,9 +16,18 @@ from deal_dash.environment import Environment
 
 _env = Environment.from_environment()
 logger = _env.create_logger(__name__)
+metrics = Metrics(namespace="deal-dash", service="embedder")
 
-_NOTIFY_RETAILERS: set[str] = {"homedepot"}
+_NOTIFY_RETAILERS: set[str] = {"homedepot", "lowes", "walmart"}
+_MIN_NOTIFY_PRICE: float = 10.0
 _MODEL_ID = "amazon.titan-embed-text-v2:0"
+_RETAILER_DISPLAY: dict[str, str] = {
+    "homedepot": "Home Depot",
+    "lowes": "Lowe's",
+    "walmart": "Walmart",
+    "walgreens": "Walgreens",
+    "tractorsupply": "Tractor Supply",
+}
 _DIMENSIONS = 256
 
 _notified_upcs: dict[str, float] = {}
@@ -47,9 +58,29 @@ def _embed(text: str) -> list[float]:
     return list(json.loads(resp["body"].read())["embedding"])
 
 
-def _post_to_discord(doc: dict[str, Any], liked: bool | None = None) -> None:
+def _format_similar(neighbors: list[dict[str, Any]]) -> str:
+    lines = []
+    for v in neighbors:
+        m = v.get("metadata", {})
+        liked_val = m.get("liked")
+        liked_icon = "👍" if liked_val is True else ("👎" if liked_val is False else "—")
+        retailer = _RETAILER_DISPLAY.get(m.get("retailer", ""), m.get("retailer", "?"))
+        lines.append(
+            f"{liked_icon} {m.get('title', m.get('category', '?'))} @ {retailer} "
+            f"${float(m.get('price', 0)):.2f} ({m.get('discount', '?')}% off)"
+        )
+    return "\n".join(lines)
+
+
+def _post_to_discord(
+    doc: dict[str, Any],
+    liked: bool | None = None,
+    similar: list[dict[str, Any]] | None = None,
+) -> None:
     custom_prefix = doc["upc"]
+    retailer_display = _RETAILER_DISPLAY.get(doc["retailer"], doc["retailer"])
     fields: list[dict[str, Any]] = [
+        {"name": "Retailer", "value": retailer_display, "inline": True},
         {"name": "Price", "value": f"${float(doc['price']):.2f}", "inline": True},
         {"name": "Discount", "value": f"{doc['discount']}% off", "inline": True},
         {"name": "Category", "value": doc["category"], "inline": True},
@@ -63,6 +94,8 @@ def _post_to_discord(doc: dict[str, Any], liked: bool | None = None) -> None:
         fields.append({"name": "Status", "value": "👍 Previously liked", "inline": True})
     elif liked is False:
         fields.append({"name": "Status", "value": "👎 Previously disliked", "inline": True})
+    if similar:
+        fields.append({"name": "Similar Deals", "value": _format_similar(similar), "inline": False})
     embed: dict[str, Any] = {
         "title": doc["title"],
         "url": doc["url"],
@@ -103,6 +136,7 @@ def _post_to_discord(doc: dict[str, Any], liked: bool | None = None) -> None:
     logger.info("posted to Discord", extra={"upc": doc["upc"], "title": doc["title"]})
 
 
+@metrics.log_metrics(raise_on_empty_metrics=False)
 def handler(
     raw_event: dict[str, Any],
     context: Any,
@@ -111,6 +145,7 @@ def handler(
 
     records = list(event.records)
     logger.info("batch received", extra={"size": len(records)})
+    metrics.add_metric(name="RecordsProcessed", unit=MetricUnit.Count, value=len(records))
 
     for record in records:
         event_name = record.event_name
@@ -136,13 +171,9 @@ def handler(
         )
 
         text = f"{doc['title']} {doc['category']} {doc.get('subcategory', '')}"
-        vector = _embed(text)
-        metadata: dict[str, Any] = {
-            "retailer": retailer,
-            "category": doc["category"],
-            "discount": int(doc["discount"]),
-            "price": float(doc["price"]),
-        }
+        content_hash = hashlib.sha256(
+            f"{text}|{retailer}|{int(doc['discount'])}|{float(doc['price'])}".encode()
+        ).hexdigest()[:16]
 
         existing = _env.s3vectors_client.get_vectors(
             vectorBucketName=_env.vector_bucket,
@@ -151,6 +182,22 @@ def handler(
             returnData=False,
             returnMetadata=True,
         ).get("vectors", [])
+
+        if existing and existing[0].get("metadata", {}).get("content_hash") == content_hash:
+            logger.info("skipping unchanged", extra={"upc": upc})
+            metrics.add_metric(name="DealsSkipped", unit=MetricUnit.Count, value=1)
+            continue
+
+        vector = _embed(text)
+        metadata: dict[str, Any] = {
+            "retailer": retailer,
+            "category": doc["category"],
+            "discount": int(doc["discount"]),
+            "price": float(doc["price"]),
+            "title": doc["title"],
+            "content_hash": content_hash,
+        }
+
         existing_liked: bool | None = None
         if existing:
             liked_val = existing[0].get("metadata", {}).get("liked")
@@ -164,13 +211,42 @@ def handler(
             vectors=[{"key": upc, "data": {"float32": vector}, "metadata": metadata}],
         )
         logger.info("embedded", extra={"upc": upc})
+        metrics.add_metric(name="DealsEmbedded", unit=MetricUnit.Count, value=1)
 
-        if (
-            _env.discord_bot_token_arn
-            and _env.discord_channel_id
-            and event_name == DynamoDBRecordEventName.INSERT
-            and retailer in _NOTIFY_RETAILERS
-            and not _already_notified(upc)
-        ):
-            _post_to_discord(doc, liked=existing_liked)
+        neighbor_results = _env.s3vectors_client.query_vectors(
+            vectorBucketName=_env.vector_bucket,
+            indexName=_env.vector_index,
+            queryVector={"float32": vector},
+            topK=6,
+            returnMetadata=True,
+        ).get("vectors", [])
+        similar = cast(list[dict[str, Any]], [v for v in neighbor_results if v["key"] != upc][:5])
+
+        if not (_env.discord_bot_token_arn and _env.discord_channel_id):
+            logger.info("discord notify skipped", extra={"upc": upc, "reason": "no config"})
+            metrics.add_metric(name="DiscordSkippedNoConfig", unit=MetricUnit.Count, value=1)
+        elif event_name != DynamoDBRecordEventName.INSERT:
+            logger.info("discord notify skipped", extra={"upc": upc, "reason": "not insert"})
+            metrics.add_metric(name="DiscordSkippedNotInsert", unit=MetricUnit.Count, value=1)
+        elif retailer not in _NOTIFY_RETAILERS:
+            logger.info(
+                "discord notify skipped",
+                extra={"upc": upc, "reason": "retailer", "retailer": retailer},
+            )
+            metrics.add_metric(name="DiscordSkippedRetailer", unit=MetricUnit.Count, value=1)
+        elif float(doc["price"]) < _MIN_NOTIFY_PRICE:
+            logger.info(
+                "discord notify skipped",
+                extra={"upc": upc, "reason": "low_price", "price": doc["price"]},
+            )
+            metrics.add_metric(name="DiscordSkippedLowPrice", unit=MetricUnit.Count, value=1)
+        elif existing_liked is False:
+            logger.info("discord notify skipped", extra={"upc": upc, "reason": "disliked"})
+            metrics.add_metric(name="DiscordSkippedDisliked", unit=MetricUnit.Count, value=1)
+        elif _already_notified(upc):
+            logger.info("discord notify skipped", extra={"upc": upc, "reason": "dup"})
+            metrics.add_metric(name="DiscordSkippedDedupe", unit=MetricUnit.Count, value=1)
+        else:
+            _post_to_discord(doc, liked=existing_liked, similar=similar)
             _mark_notified(upc)
+            metrics.add_metric(name="DiscordNotified", unit=MetricUnit.Count, value=1)
