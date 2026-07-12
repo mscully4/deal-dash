@@ -69,10 +69,21 @@ def _post_to_discord(doc: dict[str, Any]) -> bool:
     if image_url := doc.get("image_url"):
         embed["image"] = {"url": image_url}
 
+    target = f"{doc['product_key']}|{doc['store_key']}"
+    components = [
+        {
+            "type": 1,
+            "components": [
+                {"type": 2, "style": 3, "label": "👍 Like", "custom_id": f"like:{target}"},
+                {"type": 2, "style": 4, "label": "👎 Dislike", "custom_id": f"dislike:{target}"},
+            ],
+        }
+    ]
+
     resp = httpx.post(
         f"https://discord.com/api/v10/channels/{_env.discord_channel_id}/messages",
         headers={"Authorization": f"Bot {_get_bot_token()}"},
-        json={"embeds": [embed]},
+        json={"embeds": [embed], "components": components},
         timeout=10.0,
     )
     if resp.status_code == 429:

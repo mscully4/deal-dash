@@ -1,4 +1,5 @@
 import { Duration, Stack, StackProps } from "aws-cdk-lib";
+import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
 import { ITable } from "aws-cdk-lib/aws-dynamodb";
 import { DockerImageCode, DockerImageFunction, StartingPosition } from "aws-cdk-lib/aws-lambda";
 import { DynamoEventSource } from "aws-cdk-lib/aws-lambda-event-sources";
@@ -47,5 +48,24 @@ export class DealConsumerStack extends Stack {
         bisectBatchOnError: true,
       })
     );
+
+    // Like/dislike button handler for messages the notifier posts above.
+    const dealInteractions = new DockerImageFunction(this, "DealInteractionsLambda", {
+      code: DockerImageCode.fromImageAsset(".", {
+        cmd: ["deal_dash.lambdas.deal_interactions.handler.handler"],
+      }),
+      timeout: Duration.seconds(10),
+      environment: {
+        DEALS_TABLE: dealsTable.tableName,
+        DISCORD_PUBLIC_KEY: process.env.DISCORD_PUBLIC_KEY ?? "",
+      },
+    });
+
+    dealsTable.grantWriteData(dealInteractions);
+
+    const api = new RestApi(this, "DealInteractionsApi", {
+      restApiName: "deal-dash-interactions",
+    });
+    api.root.addResource("interactions").addMethod("POST", new LambdaIntegration(dealInteractions));
   }
 }

@@ -122,6 +122,32 @@ def test_handler_different_products_each_notify(monkeypatch):
     assert len(calls) == 2
 
 
+def test_post_to_discord_includes_like_dislike_buttons(monkeypatch):
+    monkeypatch.setattr(_handler_module, "_env", _make_env())
+    monkeypatch.setattr(_handler_module, "_get_bot_token", lambda: "fake-token")
+
+    resp = MagicMock()
+    resp.status_code = 200
+    posted = MagicMock(return_value=resp)
+    monkeypatch.setattr(_handler_module.httpx, "post", posted)
+
+    doc = {
+        "product_key": "homedepot#330884657",
+        "store_key": "store#509",
+        "retailer": "homedepot",
+        "title": "Milwaukee PACKOUT Rack Kit",
+        "price": "29.99",
+        "discount": "60",
+        "category": "Garage",
+    }
+    assert _handler_module._post_to_discord(doc) is True
+
+    payload = posted.call_args.kwargs["json"]
+    buttons = payload["components"][0]["components"]
+    assert buttons[0]["custom_id"] == "like:homedepot#330884657|store#509"
+    assert buttons[1]["custom_id"] == "dislike:homedepot#330884657|store#509"
+
+
 def test_rate_limited_post_is_skipped_not_marked_notified(monkeypatch):
     _handler_module._notified_products.clear()
     monkeypatch.setattr(_handler_module, "_env", _make_env())

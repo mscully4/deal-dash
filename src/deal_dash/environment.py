@@ -63,6 +63,7 @@ class Environment(BaseModel):
     vector_index: str = "deals"
     discord_bot_token_arn: str = ""
     discord_channel_id: str = ""
+    discord_public_key: str = ""
 
     @classmethod
     def from_environment(cls, env: dict[str, str] = dict(os.environ)) -> Self:
