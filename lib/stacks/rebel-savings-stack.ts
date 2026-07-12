@@ -1,8 +1,6 @@
-import { Duration, RemovalPolicy, Stack, StackProps } from "aws-cdk-lib";
+import { Duration, Stack, StackProps } from "aws-cdk-lib";
 import { LambdaIntegration, RestApi } from "aws-cdk-lib/aws-apigateway";
-import { AttributeType, BillingMode, StreamViewType, Table } from "aws-cdk-lib/aws-dynamodb";
-import { Rule, Schedule } from "aws-cdk-lib/aws-events";
-import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
+import { ITable, Table } from "aws-cdk-lib/aws-dynamodb";
 import { Effect, PolicyStatement } from "aws-cdk-lib/aws-iam";
 import {
   DockerImageCode,
@@ -17,18 +15,19 @@ import { Secret } from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
 
 export class RebelSavingsStack extends Stack {
-  public readonly dealsTable: Table;
+  public readonly dealsTable: ITable;
 
   constructor(scope: Construct, id: string, props: StackProps) {
     super(scope, id, props);
 
-    this.dealsTable = new Table(this, "DealsTable", {
+    // Existing single-source table. No longer CDK-managed (orphaned when
+    // DealDashDealsTable below took over the "DealsTable" logical ID), but
+    // still the live table backing the scraper/embedder — import it back in
+    // so those resources keep working unchanged.
+    this.dealsTable = Table.fromTableAttributes(this, "ExistingDealsTable", {
       tableName: "rebel-savings-deals",
-      partitionKey: { name: "retailer", type: AttributeType.STRING },
-      sortKey: { name: "item_id", type: AttributeType.STRING },
-      billingMode: BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.RETAIN,
-      stream: StreamViewType.NEW_IMAGE,
+      tableStreamArn:
+        "arn:aws:dynamodb:us-east-2:735029168602:table/rebel-savings-deals/stream/2026-05-07T05:52:32.092",
     });
 
     const vectorBucket = new CfnVectorBucket(this, "VectorBucket", {
@@ -124,20 +123,7 @@ export class RebelSavingsStack extends Stack {
       })
     );
 
-    const scraper = new DockerImageFunction(this, "ScraperLambda", {
-      code: DockerImageCode.fromImageAsset("."),
-      timeout: Duration.minutes(10),
-      memorySize: 1024,
-      environment: {
-        DEALS_TABLE: this.dealsTable.tableName,
-      },
-    });
-
-    this.dealsTable.grantWriteData(scraper);
-
-    new Rule(this, "ScraperSchedule", {
-      schedule: Schedule.rate(Duration.hours(1)),
-      targets: [new LambdaFunction(scraper)],
-    });
+    // ScraperLambda removed — RebelSavingsScraperV2 (deal-scraper-stack)
+    // fully covers this source now, and nothing else references it.
   }
 }
