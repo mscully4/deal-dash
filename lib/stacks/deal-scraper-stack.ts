@@ -27,6 +27,12 @@ export class DealScraperStack extends Stack {
       }),
       timeout: Duration.minutes(10),
       memorySize: 1024,
+      // Supabase refresh tokens are single-use: two concurrent invocations
+      // (e.g. a manual test invoke racing the cron, or an EventBridge retry
+      // overlapping the next scheduled run) both read the same token, one
+      // wins the rotation, and the loser permanently bricks it. Concurrency
+      // capped at 1 so that race can't happen.
+      reservedConcurrentExecutions: 1,
       environment: {
         DEALS_TABLE: dealsTable.tableName,
         HC_REFRESH_TOKEN_SECRET_ID: hcRefreshToken.secretName,
@@ -39,7 +45,14 @@ export class DealScraperStack extends Stack {
 
     new Rule(this, "HiddenClearancesScraperSchedule", {
       schedule: Schedule.cron({ minute: "0" }),
-      targets: [new LambdaFunction(hiddenClearancesScraper)],
+      targets: [
+        new LambdaFunction(hiddenClearancesScraper, {
+          // Don't let a failed run get silently replayed into the next
+          // scheduled run's window and re-trigger the same token race.
+          retryAttempts: 0,
+          maxEventAge: Duration.minutes(5),
+        }),
+      ],
     });
 
     const rebelSavingsScraperV2 = new DockerImageFunction(this, "RebelSavingsScraperV2", {
