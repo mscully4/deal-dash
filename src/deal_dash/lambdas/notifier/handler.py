@@ -115,6 +115,18 @@ def handler(raw_event: dict[str, Any], context: Any) -> None:
         assert record.dynamodb.new_image is not None
         doc: dict[str, Any] = record.dynamodb.new_image
         product_key = doc["product_key"]
+
+        if "retailer" not in doc or "price" not in doc:
+            # Sparse item: a like/dislike click can upsert a bare
+            # {product_key, store_key, liked} row via update_item if the
+            # row didn't already exist (stale button, deleted deal). Not
+            # a real deal insert — nothing to notify.
+            logger.info(
+                "notify skipped", extra={"product_key": product_key, "reason": "sparse_item"}
+            )
+            metrics.add_metric(name="SkippedSparseItem", unit=MetricUnit.Count, value=1)
+            continue
+
         retailer = doc["retailer"]
 
         if not (_env.discord_bot_token_arn and _env.discord_channel_id):

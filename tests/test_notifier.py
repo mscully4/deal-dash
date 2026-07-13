@@ -61,6 +61,24 @@ def test_handler_posts_on_insert(monkeypatch):
     assert calls[0]["product_key"] == "homedepot#330884657"
 
 
+def test_handler_skips_sparse_item_from_like_upsert(monkeypatch):
+    monkeypatch.setattr(_handler_module, "_env", _make_env())
+    calls = []
+    monkeypatch.setattr(_handler_module, "_post_to_discord", _record_call(calls))
+    sparse_record = {
+        "eventName": "INSERT",
+        "dynamodb": {
+            "NewImage": {
+                "product_key": {"S": "homedepot#stale-button-click"},
+                "store_key": {"S": "store#509"},
+                "liked": {"BOOL": True},
+            }
+        },
+    }
+    handler({"Records": [sparse_record]}, None)
+    assert calls == []
+
+
 def test_handler_skips_no_discord_config(monkeypatch):
     env = _make_env(discord_bot_token_arn="", discord_channel_id="")
     monkeypatch.setattr(_handler_module, "_env", env)
