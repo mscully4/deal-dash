@@ -114,35 +114,48 @@ def handler(raw_event: dict[str, Any], context: Any) -> None:
         assert record.dynamodb is not None
         assert record.dynamodb.new_image is not None
         doc: dict[str, Any] = record.dynamodb.new_image
-        product_key = doc["product_key"]
+        product_key = doc.get("product_key", "unknown")
 
-        if "retailer" not in doc or "price" not in doc:
-            # Sparse item: a like/dislike click can upsert a bare
-            # {product_key, store_key, liked} row via update_item if the
-            # row didn't already exist (stale button, deleted deal). Not
-            # a real deal insert — nothing to notify.
-            logger.info(
-                "notify skipped", extra={"product_key": product_key, "reason": "sparse_item"}
-            )
-            metrics.add_metric(name="SkippedSparseItem", unit=MetricUnit.Count, value=1)
-            continue
+        try:
+            if "retailer" not in doc or "price" not in doc:
+                # Sparse item: a like/dislike click can upsert a bare
+                # {product_key, store_key, liked} row via update_item if the
+                # row didn't already exist (stale button, deleted deal). Not
+                # a real deal insert — nothing to notify.
+                logger.info(
+                    "notify skipped",
+                    extra={"product_key": product_key, "reason": "sparse_item"},
+                )
+                metrics.add_metric(name="SkippedSparseItem", unit=MetricUnit.Count, value=1)
+                continue
 
-        retailer = doc["retailer"]
+            retailer = doc["retailer"]
 
-        if not (_env.discord_bot_token_arn and _env.discord_channel_id):
-            logger.info("notify skipped", extra={"product_key": product_key, "reason": "no_config"})
-            metrics.add_metric(name="SkippedNoConfig", unit=MetricUnit.Count, value=1)
-        elif retailer not in _NOTIFY_RETAILERS:
-            logger.info("notify skipped", extra={"product_key": product_key, "reason": "retailer"})
-            metrics.add_metric(name="SkippedRetailer", unit=MetricUnit.Count, value=1)
-        elif float(doc["price"]) < _MIN_NOTIFY_PRICE:
-            logger.info("notify skipped", extra={"product_key": product_key, "reason": "low_price"})
-            metrics.add_metric(name="SkippedLowPrice", unit=MetricUnit.Count, value=1)
-        elif _already_notified(product_key):
-            logger.info("notify skipped", extra={"product_key": product_key, "reason": "dedupe"})
-            metrics.add_metric(name="SkippedDedupe", unit=MetricUnit.Count, value=1)
-        elif _post_to_discord(doc):
-            _mark_notified(product_key)
-            metrics.add_metric(name="Notified", unit=MetricUnit.Count, value=1)
-        else:
-            metrics.add_metric(name="RateLimited", unit=MetricUnit.Count, value=1)
+            if not (_env.discord_bot_token_arn and _env.discord_channel_id):
+                logger.info(
+                    "notify skipped", extra={"product_key": product_key, "reason": "no_config"}
+                )
+                metrics.add_metric(name="SkippedNoConfig", unit=MetricUnit.Count, value=1)
+            elif retailer not in _NOTIFY_RETAILERS:
+                logger.info(
+                    "notify skipped", extra={"product_key": product_key, "reason": "retailer"}
+                )
+                metrics.add_metric(name="SkippedRetailer", unit=MetricUnit.Count, value=1)
+            elif float(doc["price"]) < _MIN_NOTIFY_PRICE:
+                logger.info(
+                    "notify skipped", extra={"product_key": product_key, "reason": "low_price"}
+                )
+                metrics.add_metric(name="SkippedLowPrice", unit=MetricUnit.Count, value=1)
+            elif _already_notified(product_key):
+                logger.info(
+                    "notify skipped", extra={"product_key": product_key, "reason": "dedupe"}
+                )
+                metrics.add_metric(name="SkippedDedupe", unit=MetricUnit.Count, value=1)
+            elif _post_to_discord(doc):
+                _mark_notified(product_key)
+                metrics.add_metric(name="Notified", unit=MetricUnit.Count, value=1)
+            else:
+                metrics.add_metric(name="RateLimited", unit=MetricUnit.Count, value=1)
+        except Exception:
+            logger.exception("notify failed", extra={"product_key": product_key})
+            metrics.add_metric(name="NotifyError", unit=MetricUnit.Count, value=1)

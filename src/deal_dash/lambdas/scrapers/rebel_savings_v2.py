@@ -55,22 +55,39 @@ async def _run(event: RebelSavingsScraperEvent) -> dict[Retailer, int]:
     results: dict[Retailer, int] = {}
     for retailer in event.retailers:
         count = 0
-        async for hit in client.search_raw(retailer, lat, lon, event.radius, since_ts):
-            store.put_deal(to_deal(hit, retailer=retailer))
-            count += 1
-        logger.info("retailer scraped", extra={"retailer": retailer.value, "deals": count})
-        with single_metric(
-            name="DealsScraped",
-            unit=MetricUnit.Count,
-            value=count,
-            namespace="deal-dash",
-            default_dimensions={
-                "service": "rebel-savings-scraper-v2",
-                "retailer": retailer.value,
-            },
-        ):
-            pass
-        results[retailer] = count
+        try:
+            async for hit in client.search_raw(retailer, lat, lon, event.radius, since_ts):
+                store.put_deal(to_deal(hit, retailer=retailer))
+                count += 1
+            logger.info("retailer scraped", extra={"retailer": retailer.value, "deals": count})
+            with single_metric(
+                name="DealsScraped",
+                unit=MetricUnit.Count,
+                value=count,
+                namespace="deal-dash",
+                default_dimensions={
+                    "service": "rebel-savings-scraper-v2",
+                    "retailer": retailer.value,
+                },
+            ):
+                pass
+            results[retailer] = count
+        except Exception:
+            logger.exception(
+                "retailer scrape failed",
+                extra={"retailer": retailer.value, "deals_before_failure": count},
+            )
+            with single_metric(
+                name="ScrapeError",
+                unit=MetricUnit.Count,
+                value=1,
+                namespace="deal-dash",
+                default_dimensions={
+                    "service": "rebel-savings-scraper-v2",
+                    "retailer": retailer.value,
+                },
+            ):
+                pass
     return results
 
 

@@ -27,16 +27,42 @@ async def _run(event: HiddenClearancesScraperEvent) -> dict[str, int]:
     counts: dict[str, int] = {"feed": 0, "nearby": 0}
 
     if event.include_feed:
-        async for item in client.search_feed():
-            store.put_deal(to_deal(item))
-            counts["feed"] += 1
-        logger.info("feed scraped", extra={"deals": counts["feed"]})
+        try:
+            async for item in client.search_feed():
+                store.put_deal(to_deal(item))
+                counts["feed"] += 1
+            logger.info("feed scraped", extra={"deals": counts["feed"]})
+        except Exception:
+            logger.exception(
+                "feed scrape failed", extra={"deals_before_failure": counts["feed"]}
+            )
+            with single_metric(
+                name="ScrapeError",
+                unit=MetricUnit.Count,
+                value=1,
+                namespace="deal-dash",
+                default_dimensions={"service": "hidden-clearances-scraper", "kind": "feed"},
+            ):
+                pass
 
     if event.include_nearby:
-        async for item in client.search_nearby():
-            store.put_deal(to_deal(item))
-            counts["nearby"] += 1
-        logger.info("nearby scraped", extra={"deals": counts["nearby"]})
+        try:
+            async for item in client.search_nearby():
+                store.put_deal(to_deal(item))
+                counts["nearby"] += 1
+            logger.info("nearby scraped", extra={"deals": counts["nearby"]})
+        except Exception:
+            logger.exception(
+                "nearby scrape failed", extra={"deals_before_failure": counts["nearby"]}
+            )
+            with single_metric(
+                name="ScrapeError",
+                unit=MetricUnit.Count,
+                value=1,
+                namespace="deal-dash",
+                default_dimensions={"service": "hidden-clearances-scraper", "kind": "nearby"},
+            ):
+                pass
 
     for kind, count in counts.items():
         with single_metric(
